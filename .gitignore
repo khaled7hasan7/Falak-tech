@@ -1,0 +1,21 @@
+# Everything that is not code.
+#
+# data/ holds the signing key, the client register and the console password.
+# None of it belongs in a repository — the key least of all, because a key that
+# has been committed once is in the history forever, and the only way to undo
+# it is to reissue every licence you have ever sold.
+data/
+
+# Belt and braces: no key file gets committed from anywhere in this tree, even
+# if it is moved out of data/ by accident.
+*.key
+*.key.bak
+*.pem
+config.json
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+*.log
+.DS_Store
+Thumbs.db
