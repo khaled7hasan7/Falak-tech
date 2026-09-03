@@ -112,6 +112,91 @@ if ( $path === '/logout' ) {
     redirect( '/login' );
 }
 
+/* --------------------------------------------------------------------------
+ * A shop reporting in.
+ *
+ * The only route here that is not behind the password, because the caller is
+ * a till in a grocery and there is nobody to type one. What stands in place of
+ * a password is the licence the shop sends: this console signed it, so
+ * verifying that signature proves the report came from a shop we actually sold
+ * to. There is no secret to distribute and none to lose.
+ *
+ * It is deliberately the smallest surface that answers "which of my shops are
+ * alive, paid, and on the current version":
+ *
+ *   - it accepts one JSON object, capped at 8 KB
+ *   - it writes exactly one row, replacing what was there
+ *   - it answers "ok" and nothing else — no instruction goes back down, ever
+ *
+ * That last one matters more than it looks. A reply the shop obeyed would make
+ * this console a way to reach into twenty tills, and the day somebody takes
+ * this laptop they would have it. A vendor who can only watch cannot be turned
+ * into a vendor who does harm.
+ * ----------------------------------------------------------------------- */
+
+if ( $path === '/report' ) {
+    header( 'Content-Type: application/json; charset=utf-8' );
+
+    if ( ! $post ) {
+        http_response_code( 405 );
+        echo json_encode( [ 'ok' => false ] );
+        exit;
+    }
+
+    $raw = (string) file_get_contents( 'php://input', false, null, 0, 8192 );
+    $in = json_decode( $raw, true );
+
+    /**
+     * Everything below answers with the same shape and never says why. A
+     * report is machine-to-machine and the shop ignores the reply, so a
+     * detailed refusal would teach nobody anything except somebody probing
+     * this endpoint.
+     */
+    $reject = function () {
+        http_response_code( 202 );
+        echo json_encode( [ 'ok' => false ] );
+        exit;
+    };
+
+    if ( ! is_array( $in ) || ! isset( $in[ 'licence' ] ) || ! is_string( $in[ 'licence' ] ) ) {
+        $reject();
+    }
+
+    $checked = Licence::inspect( $in[ 'licence' ] );
+
+    if ( ! $checked[ 'ok' ] ) {
+        $reject();
+    }
+
+    /**
+     * The install id is taken from the signed payload, never from the body of
+     * the report. The rest of the report is a shop describing itself and can
+     * say anything; this one field decides which row is overwritten, so it has
+     * to come from the half that carries a signature.
+     */
+    $install = (string) ( $checked[ 'payload' ][ 'install' ] ?? '' );
+
+    if ( $install === '' || $install === '*' ) {
+        $reject();
+    }
+
+    Store::recordReport( [
+        'install' => $install,
+        'shop' => is_string( $in[ 'shop' ] ?? null ) ? mb_substr( $in[ 'shop' ], 0, 120 ) : null,
+        'state' => is_string( $in[ 'state' ] ?? null ) ? mb_substr( $in[ 'state' ], 0, 20 ) : null,
+        'expires' => $checked[ 'payload' ][ 'expires' ] ?? null,
+        'days' => is_numeric( $in[ 'days' ] ?? null ) ? (int) $in[ 'days' ] : null,
+        'plan' => $checked[ 'payload' ][ 'plan' ] ?? null,
+        'version' => is_string( $in[ 'version' ] ?? null ) ? mb_substr( $in[ 'version' ], 0, 30 ) : null,
+        'commit' => is_string( $in[ 'commit' ] ?? null ) ? mb_substr( $in[ 'commit' ], 0, 40 ) : null,
+        'at' => is_string( $in[ 'at' ] ?? null ) ? mb_substr( $in[ 'at' ], 0, 40 ) : null,
+        'tz' => is_string( $in[ 'tz' ] ?? null ) ? mb_substr( $in[ 'tz' ], 0, 60 ) : null,
+    ] );
+
+    echo json_encode( [ 'ok' => true ] );
+    exit;
+}
+
 if ( ! signed_in() ) {
     redirect( '/login' );
 }
@@ -126,6 +211,8 @@ if ( $path === '/' ) {
     view( 'dashboard', [
         'clients' => $clients,
         'summary' => Store::summary( $clients ),
+        'reports' => Store::reports(),
+        'strays' => Store::strayReports(),
     ] );
     exit;
 }

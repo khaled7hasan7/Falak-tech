@@ -200,6 +200,59 @@ function days_word( int $n, bool $oblique = false ): string
  * warning, 7 of grace after expiry — so what you read here is what the
  * shopkeeper is seeing on their own screen.
  */
+/**
+ * How long since a shop last said anything, and whether that is a worry.
+ *
+ * A shop reports every six hours, so anything under half a day is ordinary.
+ * Past three days it is not a slow connection any more — the machine is off,
+ * the scheduler is dead, or the shop has stopped using the software, and each
+ * of those is a phone call worth making before the customer makes it.
+ *
+ * A shop that has never reported is not a fault. It means the shop was never
+ * given a reporting address, which is the default, so it is drawn as absence
+ * rather than as a problem.
+ *
+ * @return array{ label: string, tone: string, hours: ?int }
+ */
+function since_word( ?string $timestamp ): array
+{
+    if ( ! $timestamp ) {
+        return [ 'label' => 'لا يُبلّغ', 'tone' => 'idle', 'hours' => null ];
+    }
+
+    try {
+        $then = new DateTimeImmutable( $timestamp );
+    } catch ( Throwable ) {
+        return [ 'label' => 'غير مقروء', 'tone' => 'idle', 'hours' => null ];
+    }
+
+    $minutes = (int) round( ( time() - $then->getTimestamp() ) / 60 );
+
+    /** a shop's clock a little ahead of yours is not a report from the future */
+    if ( $minutes < 0 ) {
+        $minutes = 0;
+    }
+
+    $hours = intdiv( $minutes, 60 );
+
+    $label = match ( true ) {
+        $minutes < 2 => 'الآن',
+        $minutes < 60 => 'قبل ' . $minutes . ' دقيقة',
+        $hours === 1 => 'قبل ساعة',
+        $hours === 2 => 'قبل ساعتين',
+        $hours < 24 => 'قبل ' . $hours . ' ساعات',
+        default => 'قبل ' . days_word( intdiv( $hours, 24 ), true ),
+    };
+
+    $tone = match ( true ) {
+        $hours < 12 => 'ok',
+        $hours < 72 => 'warn',
+        default => 'bad',
+    };
+
+    return [ 'label' => $label, 'tone' => $tone, 'hours' => $hours ];
+}
+
 function standing( ?int $days ): array
 {
     if ( $days === null ) {

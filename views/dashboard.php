@@ -50,6 +50,7 @@ $tiles = [
                     <th>ينتهي</th>
                     <th>المتبقّي</th>
                     <th>الحالة</th>
+                    <th>الاتصال</th>
                     <th></th>
                 </tr>
             </thead>
@@ -108,6 +109,29 @@ $tiles = [
                         </span>
                     </td>
 
+                    <?php
+                        /**
+                         * Matched on the install id the licence was signed for,
+                         * not on the one typed into the client's record. The
+                         * signed one is what the shop actually runs on, and a
+                         * disagreement between the two is precisely the case
+                         * this column should not paper over.
+                         */
+                        $seen = $reports[ $client[ 'licensed_install' ] ?? '' ]
+                            ?? $reports[ $client[ 'install_id' ] ?? '' ]
+                            ?? null;
+
+                        $since = since_word( $seen[ 'seen_at' ] ?? null );
+                    ?>
+                    <td>
+                        <span class="tiny tone-<?= $since[ 'tone' ] ?>"><?= e( $since[ 'label' ] ) ?></span>
+                        <?php if ( $seen && ( $seen[ 'commit_ref' ] || $seen[ 'version' ] ) ) : ?>
+                            <div class="meta num" style="font-size:11px">
+                                <?= e( trim( ( $seen[ 'version' ] ?? '' ) . ' ' . ( $seen[ 'commit_ref' ] ?? '' ) ) ) ?>
+                            </div>
+                        <?php endif; ?>
+                    </td>
+
                     <td style="text-align:end">
                         <a class="btn sm" href="/clients/<?= (int) $client[ 'id' ] ?>">
                             <?= $days === null ? 'إصدار' : 'تجديد' ?>
@@ -117,5 +141,52 @@ $tiles = [
             <?php endforeach; ?>
             </tbody>
         </table>
+    </div>
+<?php endif; ?>
+
+<?php if ( ! empty( $strays ) ) : ?>
+    <?php /*
+        Reports from installs no licence on file was issued for.
+
+        Every one of these is a real situation worth a look, and none of them
+        would be visible otherwise: a shop being set up before its client
+        record exists; an install id that changed under a client, which
+        invalidates their paid licence the moment it happens; or a licence
+        issued from the command line rather than from here. Dropping an
+        unmatched report on the floor would hide exactly the case that costs
+        a shop its morning.
+    */ ?>
+    <div class="panel" style="margin-top:26px">
+        <header>
+            <h2>تنصيبات لا تطابق أي مفتاح</h2>
+        </header>
+        <div class="body">
+            <p class="tiny" style="margin-bottom:14px">
+                هذه أجهزة بلّغت عن نفسها بمفتاح وقّعتَه أنت، لكن معرّف تنصيبها لا يطابق
+                أي ترخيص في السجلّ. غالباً محلّ قيد التركيب — أو معرّف تنصيب تغيّر تحت
+                عميل، وهذا يُبطل اشتراكه المدفوع في اللحظة نفسها.
+            </p>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>التنصيب</th>
+                        <th>المحل</th>
+                        <th>الإصدار</th>
+                        <th>آخر ظهور</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ( $strays as $s ) : $since = since_word( $s[ 'seen_at' ] ); ?>
+                    <tr>
+                        <td class="num"><?= e( $s[ 'install_id' ] ) ?></td>
+                        <td><?= e( $s[ 'shop' ] ?: '—' ) ?></td>
+                        <td class="num" style="font-size:12px"><?= e( trim( ( $s[ 'version' ] ?? '' ) . ' ' . ( $s[ 'commit_ref' ] ?? '' ) ) ) ?: '—' ?></td>
+                        <td><span class="tiny tone-<?= $since[ 'tone' ] ?>"><?= e( $since[ 'label' ] ) ?></span></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
     </div>
 <?php endif; ?>
